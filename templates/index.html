@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>穿行测试智能筛选工具 V1.6</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; }
+        .section { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+        .section-title { font-weight: bold; color: #34495e; margin-bottom: 15px; display: block; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: #555; }
+        input[type="text"], input[type="number"], textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; margin-bottom: 15px; }
+        .file-upload { border: 2px dashed #3498db; padding: 20px; text-align: center; background: #f9fbfd; border-radius: 4px; cursor: pointer; margin-bottom: 15px; }
+        .file-upload:hover { background: #eef5fc; }
+        .btn { display: block; width: 100%; padding: 15px; background-color: #27ae60; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
+        .btn:hover { background-color: #219150; }
+        .btn:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        .rules-box { background: #fff8e1; padding: 15px; border-left: 4px solid #ffc107; font-size: 14px; color: #555; line-height: 1.6; }
+        #loading { display: none; text-align: center; margin-top: 20px; color: #2980b9; }
+        #result-area { display: none; margin-top: 20px; text-align: center; }
+        .download-btn { background-color: #3498db; display: inline-block; padding: 10px 20px; text-decoration: none; color: white; border-radius: 4px; margin-top: 10px; }
+        .error-msg { color: #e74c3c; text-align: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>穿行测试智能筛选工具 V1.6</h1>
+
+    <!-- 规则展示 -->
+    <div class="section">
+        <span class="section-title">📋 系统固定筛选规则 (后端自动执行)</span>
+        <div class="rules-box">
+            • 支持 60MB+ 超大文件后端处理<br>
+            • 数量>0 且 未税总金额>0<br>
+            • 剔除负数及次月财务应收，保留正数暂估<br>
+            • 出库单号匹配优先级：1个 → 2个 → 3个订单号<br>
+            • 同公司样本月份分散，优先抽取大额<br>
+            • 新增企业自动识别，每家抽取 ≤ 6 笔<br>
+            • 本年总笔数 ≈ 过去两年平均值 (±10%)
+        </div>
+    </div>
+
+    <form id="uploadForm" enctype="multipart/form-data">
+        <!-- 文件上传 -->
+        <div class="section">
+            <span class="section-title">📂 文件上传区</span>
+            
+            <label>1. 当年待抽样数据表 (必传，支持 60MB+)</label>
+            <div class="file-upload" onclick="document.getElementById('current_file').click()">
+                <span id="current_file_label">点击选择文件或拖拽至此</span>
+                <input type="file" id="current_file" name="current_year_file" accept=".xlsx" style="display:none" required onchange="updateFileName(this, 'current_file_label')">
+            </div>
+
+            <label>2. 历史穿行底稿 (多文件上传，N家公司=N个文件)</label>
+            <div class="file-upload" onclick="document.getElementById('history_files').click()">
+                <span id="history_file_label">点击选择多个历史底稿文件</span>
+                <input type="file" id="history_files" name="history_files" accept=".xlsx" multiple style="display:none" onchange="updateFileName(this, 'history_file_label')">
+            </div>
+        </div>
+
+        <!-- 参数输入 -->
+        <div class="section">
+            <span class="section-title">⚙️ 筛选参数配置</span>
+            
+            <label>目标年度</label>
+            <input type="number" name="target_year" placeholder="例如：2024" value="2024" required>
+
+            <label>关联客戶名单 (用逗号分隔，将自动剔除)</label>
+            <textarea name="related_customers" rows="2" placeholder="例如：A公司，B集团，C有限公司"></textarea>
+
+            <label>本年度前10大客戶 (用于权重计算)</label>
+            <textarea name="top10_customers" rows="2" placeholder="例如：X公司，Y工厂..."></textarea>
+
+            <label>个性化筛选要求 (选填)</label>
+            <textarea name="custom_requirements" rows="2" placeholder="如有特殊备注请填写"></textarea>
+        </div>
+
+        <button type="submit" class="btn" id="submitBtn">🚀 开始自动筛选</button>
+    </form>
+
+    <div id="loading">
+        <p>正在后端处理超大数据，请稍候... (可能需要 1-3 分钟)</p>
+        <p>💡 提示：正在解析 Excel、识别新增企业、执行 AI 抽样规则...</p>
+    </div>
+
+    <div id="result-area">
+        <h3 id="result-message" style="color: #27ae60;"></h3>
+        <a id="download-link" class="download-btn" href="#">📥 下载结果 Excel</a>
+    </div>
+    
+    <div id="error-message" class="error-msg"></div>
+</div>
+
+<script>
+    function updateFileName(input, labelId) {
+        const fileName = input.files.length > 0 ? input.files[0].name : (input.files.length > 1 ? `已选择 ${input.files.length} 个文件` : "点击选择文件");
+        document.getElementById(labelId).innerText = fileName;
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+        const resultArea = document.getElementById('result-area');
+        const errorMsg = document.getElementById('error-message');
+        
+        // 重置状态
+        submitBtn.disabled = true;
+        loading.style.display = 'block';
+        resultArea.style.display = 'none';
+        errorMsg.innerText = '';
+
+        const formData = new FormData(this);
+
+        try {
+            const response = await fetch('/process', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                document.getElementById('result-message').innerText = data.message;
+                document.getElementById('download-link').href = data.download_url;
+                resultArea.style.display = 'block';
+            } else {
+                errorMsg.innerText = "错误：" + data.message;
+            }
+        } catch (error) {
+            errorMsg.innerText = "网络错误或服务器异常：" + error.message;
+        } finally {
+            submitBtn.disabled = false;
+            loading.style.display = 'none';
+        }
+    });
+</script>
+
+</body>
+</html>
