@@ -35,3 +35,4 @@
 1.  克隆或下载本项目
     ```bash
     git clone https://github.com/Anqingji/financial-audit-system.git
+2.命令：streamlit run app.py
