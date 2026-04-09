@@ -11,7 +11,7 @@ from collections import defaultdict
 
 # --- 页面配置 ---
 st.set_page_config(
-    page_title="穿行测试智能筛选工具 V2.5 (按业务量分层)",
+    page_title="财务数据智能处理平台",
     page_icon="📊",
     layout="wide"
 )
@@ -658,7 +658,7 @@ def apply_amount_filter_and_rebalance(original_sample, df_deduplicated, col_mapp
 
 # --- 主界面 ---
 
-st.title("📊 穿行测试智能筛选工具 V2.5 (按业务量分层)")
+st.title("📊财务数据智能处理平台")
 st.markdown("""
 上传当年财务明细表，AI 自动分析并进行有代表性的分层抽样。
 """)
